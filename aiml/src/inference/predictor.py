@@ -83,6 +83,13 @@ class RealRetinalAIPredictor:
                 self.calibration_manager.frozen_threshold = float(checkpoint["calibrated_threshold"])
             if "model_version" in checkpoint:
                 self.MODEL_VERSION = str(checkpoint["model_version"])
+            if "clinical_normalization_parameters" in checkpoint:
+                norm_params = checkpoint["clinical_normalization_parameters"]
+                if isinstance(norm_params, dict) and "mean" in norm_params and "std" in norm_params:
+                    FeatureContractValidator.set_normalization_parameters(
+                        mean=norm_params["mean"],
+                        std=norm_params["std"],
+                    )
         else:
             self.model.load_state_dict(checkpoint)
         self.model.eval()
@@ -139,8 +146,9 @@ class RealRetinalAIPredictor:
             ordered_features, feature_dict = FeatureContractValidator.validate_and_serialize(
                 clinical_features
             )
+            norm_features = FeatureContractValidator.normalize_vector(ordered_features)
             clinical_tensor = torch.tensor(
-                [ordered_features], dtype=torch.float32, device=self.device
+                [norm_features], dtype=torch.float32, device=self.device
             )
         except Exception as e:
             return {

@@ -95,7 +95,8 @@ class RetinalFundusDataset(Dataset):
         # Validate and convert clinical features
         raw_features = sample["clinical_features"]
         ordered_feats, _ = FeatureContractValidator.validate_and_serialize(raw_features)
-        clinical_tensor = torch.tensor(ordered_feats, dtype=torch.float32)
+        norm_feats = FeatureContractValidator.normalize_vector(ordered_feats)
+        clinical_tensor = torch.tensor(norm_feats, dtype=torch.float32)
 
         label = int(sample["label"])
         return image_tensor, clinical_tensor, label

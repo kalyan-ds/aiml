@@ -1,6 +1,6 @@
 """
 Retinal AI: Real Inference Latency Benchmark
-Profiles actual runtime latency breakdown on host hardware.
+Profiles actual runtime latency breakdown on host hardware across all 7 required dimensions.
 """
 
 import sys
@@ -21,12 +21,22 @@ from aiml.src.explainability.gradcam import GradCAMGenerator
 def profile():
     print("=== Retinal AI Latency Benchmark ===")
     preprocessor = FundusPreprocessor()
+    checkpoint_path = "aiml/models_weights/resnet50_fusion_v1.0.0.pt"
     model = RetinalFusionModel(pretrained=False)
+    if os.path.exists(checkpoint_path):
+        ckpt = torch.load(checkpoint_path, map_location="cpu")
+        model.load_state_dict(ckpt["model_state_dict"])
     model.eval()
+
     gradcam = GradCAMGenerator(model)
 
-    raw_img = Image.new("RGB", (600, 600), (180, 70, 30))
-    raw_feats = [1.0] * 16
+    raw_img = Image.new("RGB", (512, 512), (180, 70, 30))
+    raw_feats = [
+        6.0, 4.0, 10.0, 2.0,
+        25.0, 10.0, 40.0, 15.0,
+        14.2, 13.8, 14.5, 13.9,
+        22.0, 90.0, 8.0, 210.0,
+    ]
 
     # Warmup runs (5 runs)
     print("Running 5 warmup iterations...")
@@ -37,15 +47,16 @@ def profile():
             _ = model(img_t, clin_t)
         _ = gradcam.generate(img_t, clin_t, target_class=2)
 
-    print("Running 20 benchmark iterations...")
+    print("Running 25 benchmark iterations...")
     t_preprocess = []
     t_resnet_backbone = []
     t_clinical_proj = []
     t_fusion_head = []
     t_gradcam = []
-    t_end_to_end = []
+    t_without_gradcam = []
+    t_with_gradcam = []
 
-    for _ in range(20):
+    for _ in range(25):
         t0 = time.perf_counter()
 
         # 1. Preprocessing
@@ -62,7 +73,7 @@ def profile():
         t_c1 = time.perf_counter()
         t_resnet_backbone.append((t_c1 - t_c0) * 1000)
 
-        # 3. Clinical Projection
+        # 3. Clinical Branch Projection
         t_cl0 = time.perf_counter()
         with torch.no_grad():
             v_clin = model.clinical_branch(clin_t)
@@ -74,8 +85,12 @@ def profile():
         with torch.no_grad():
             z = torch.cat([v_cnn, v_clin], dim=1)
             logits = model.classifier(z)
+            probs = torch.softmax(logits, dim=1)
         t_f1 = time.perf_counter()
         t_fusion_head.append((t_f1 - t_f0) * 1000)
+
+        t_without_g = time.perf_counter()
+        t_without_gradcam.append((t_without_g - t0) * 1000)
 
         # 5. Grad-CAM
         t_g0 = time.perf_counter()
@@ -85,15 +100,16 @@ def profile():
         t_gradcam.append((t_g1 - t_g0) * 1000)
 
         t_end = time.perf_counter()
-        t_end_to_end.append((t_end - t0) * 1000)
+        t_with_gradcam.append((t_end - t0) * 1000)
 
-    print("\n--- Benchmark Results (Host CPU: 20 iterations) ---")
-    print(f"Preprocessing (RGB -> 512x512 -> Norm) : {np.mean(t_preprocess):.2f} +/- {np.std(t_preprocess):.2f} ms")
-    print(f"ResNet-50 CNN Backbone (GAP -> 2048-D) : {np.mean(t_resnet_backbone):.2f} +/- {np.std(t_resnet_backbone):.2f} ms")
-    print(f"Clinical Projection (16-D -> 32-D)     : {np.mean(t_clinical_proj):.2f} +/- {np.std(t_clinical_proj):.2f} ms")
-    print(f"Multimodal Fusion & Head (2080 -> 5)   : {np.mean(t_fusion_head):.2f} +/- {np.std(t_fusion_head):.2f} ms")
-    print(f"Grad-CAM Heatmap + Overlay Blend       : {np.mean(t_gradcam):.2f} +/- {np.std(t_gradcam):.2f} ms")
-    print(f"Total End-to-End Latency               : {np.mean(t_end_to_end):.2f} +/- {np.std(t_end_to_end):.2f} ms")
+    print("\n--- Benchmark Results (Host CPU: 25 iterations) ---")
+    print(f"1. Preprocessing (RGB -> 512x512 -> Norm) : {np.mean(t_preprocess):.2f} +/- {np.std(t_preprocess):.2f} ms")
+    print(f"2. CNN Backbone (ResNet-50 GAP -> 2048-D) : {np.mean(t_resnet_backbone):.2f} +/- {np.std(t_resnet_backbone):.2f} ms")
+    print(f"3. Clinical Branch (16-D -> 32-D)         : {np.mean(t_clinical_proj):.2f} +/- {np.std(t_clinical_proj):.2f} ms")
+    print(f"4. Fusion & Head (2080-D -> 5 logits)     : {np.mean(t_fusion_head):.2f} +/- {np.std(t_fusion_head):.2f} ms")
+    print(f"5. Grad-CAM (Hook + JET LUT Overlay)      : {np.mean(t_gradcam):.2f} +/- {np.std(t_gradcam):.2f} ms")
+    print(f"6. Total WITHOUT Grad-CAM                 : {np.mean(t_without_gradcam):.2f} +/- {np.std(t_without_gradcam):.2f} ms")
+    print(f"7. Total WITH Grad-CAM                    : {np.mean(t_with_gradcam):.2f} +/- {np.std(t_with_gradcam):.2f} ms")
 
 
 if __name__ == "__main__":

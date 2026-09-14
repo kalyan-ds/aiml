@@ -1,22 +1,22 @@
 """
-Retinal AI: Grad-CAM Explainability Generator
+Retinal AI: High-Performance Grad-CAM Explainability Generator
 Project: Smart India Hackathon 2026 - Retinal AI Diabetic Retinopathy Screening
 Primary Specification: MATLAB Retinal AI SIH Presentation Guide.pdf & AI_SPEC.md
 
-Target Layer: ResNet-50 final convolutional block `layer4[2]`
-Overlay: JET colormap upsampled to original fundus resolution, blended at alpha=0.45 (45% opacity)
-Clinical Caveat: Grad-CAM heatmaps highlight visual discriminative regions for the model's
-predicted ICDR grade and do not constitute independent histological or lesion validation.
+Optimizations for CPU Screening:
+  1. Local Head Backpropagation: Isolates gradient flow to the classification head
+     and average pooling layer directly w.r.t layer4 activations, eliminating 40+
+     convolutional backward passes through ResNet-50.
+  2. Vectorized JET Colormap LUT: Uses a precomputed 256-level RGB lookup table for
+     instantaneous O(1) alpha blending, bypassing slow matplotlib per-pixel mapping.
 """
 
 import os
-import io
 from typing import Tuple, Optional, Union
 import numpy as np
 from PIL import Image
 import matplotlib
-matplotlib.use("Agg")  # Headless backend
-import matplotlib.pyplot as plt
+matplotlib.use("Agg")
 import matplotlib.cm as cm
 import torch
 import torch.nn as nn
@@ -33,30 +33,9 @@ class GradCAMGenerator:
         self.model = model
         self.model.eval()
 
-        # Identify target layer: layer4[2] of ResNet-50
-        if target_layer is not None:
-            self.target_layer = target_layer
-        elif hasattr(model, "layer4"):
-            self.target_layer = model.layer4[2]
-        elif hasattr(model, "backbone") and hasattr(model.backbone, "layer4"):
-            self.target_layer = model.backbone.layer4[2]
-        else:
-            raise ValueError("Could not automatically locate ResNet-50 layer4[2] in model.")
-
-        self.gradients = None
-        self.activations = None
-        self._register_hooks()
-
-    def _register_hooks(self):
-        def forward_hook(module, input, output):
-            self.activations = output
-
-        def backward_hook(module, grad_in, grad_out):
-            # grad_out is a tuple where the first element is the gradient of loss w.r.t layer output
-            self.gradients = grad_out[0]
-
-        self.target_layer.register_forward_hook(forward_hook)
-        self.target_layer.register_full_backward_hook(backward_hook)
+        # Precompute vectorized JET colormap lookup table (256, 3)
+        jet = matplotlib.colormaps["jet"]
+        self._jet_lut = (jet(np.linspace(0, 1, 256))[:, :3] * 255.0).astype(np.float32)
 
     def generate(
         self,
@@ -66,41 +45,56 @@ class GradCAMGenerator:
     ) -> np.ndarray:
         """
         Generate normalized 2D Grad-CAM heatmap for the specified or predicted class.
-        Args:
-            image_tensor: (1, 3, H, W) normalized image tensor
-            clinical_tensor: (1, 16) clinical feature tensor
-            target_class: Target ICDR class index (0..4). If None, uses argmax(logits).
-        Returns:
-            cam_map: (H, W) float32 numpy array normalized to [0.0, 1.0]
+        Uses targeted backward propagation w.r.t layer4 spatial activations.
         """
-        self.model.zero_grad()
+        # Step 1: Forward CNN backbone up to layer4 activations without graph overhead
+        with torch.no_grad():
+            x = self.model.conv1(image_tensor)
+            x = self.model.bn1(x)
+            x = self.model.relu(x)
+            x = self.model.maxpool(x)
 
-        # Forward pass
-        logits = self.model(image_tensor, clinical_tensor)  # (1, 5)
+            x = self.model.layer1(x)
+            x = self.model.layer2(x)
+            x = self.model.layer3(x)
+            raw_activations = self.model.layer4(x)  # (1, 2048, H_act, W_act)
+
+        # Step 2: Attach gradient tracking only to layer4 activations
+        activations = raw_activations.detach().clone().requires_grad_(True)
+        pooled = self.model.avgpool(activations)
+        v_cnn = torch.flatten(pooled, 1)  # (1, 2048)
+
+        # Step 3: Clinical branch (deterministic evaluation)
+        with torch.no_grad():
+            v_clin = self.model.clinical_branch(clinical_tensor)  # (1, 32)
+
+        # Step 4: Fusion and classification head
+        z = torch.cat([v_cnn, v_clin], dim=1)  # (1, 2080)
+        logits = self.model.classifier(z)       # (1, 5)
 
         if target_class is None:
             target_class = int(torch.argmax(logits, dim=1).item())
 
-        # Backward pass w.r.t target class logit
+        # Step 5: Fast backward pass exclusively through head to activations
+        self.model.classifier.zero_grad()
         score = logits[0, target_class]
-        score.backward(retain_graph=True)
+        score.backward()
 
-        # Global average pool the gradients
-        # activations: (1, C, H_act, W_act)
-        # gradients:   (1, C, H_act, W_act)
-        grads = self.gradients.detach()
-        acts = self.activations.detach()
+        grads = activations.grad.detach()  # (1, 2048, H_act, W_act)
+        acts = activations.detach()        # (1, 2048, H_act, W_act)
 
-        weights = torch.mean(grads, dim=(2, 3), keepdim=True)  # (1, C, 1, 1)
+        # Global average pool the gradients across spatial dimensions
+        weights = torch.mean(grads, dim=(2, 3), keepdim=True)  # (1, 2048, 1, 1)
         cam = torch.sum(weights * acts, dim=1, keepdim=True)    # (1, 1, H_act, W_act)
 
-        # Apply ReLU to retain only positive influences
+        # Apply ReLU to isolate positive influences
         cam = F.relu(cam)
 
-        # Upsample to input image dimensions (512, 512)
+        # Bilinear upsample to fundus frame dimensions
+        h_in, w_in = image_tensor.shape[2], image_tensor.shape[3]
         cam = F.interpolate(
             cam,
-            size=(image_tensor.shape[2], image_tensor.shape[3]),
+            size=(h_in, w_in),
             mode="bilinear",
             align_corners=False,
         )
@@ -121,33 +115,24 @@ class GradCAMGenerator:
         original_image: Image.Image,
         cam_map: np.ndarray,
         alpha: float = 0.45,
-        colormap_name: str = "jet",
     ) -> Image.Image:
         """
-        Blends the Grad-CAM heatmap over the original fundus image.
-        Args:
-            original_image: PIL RGB image
-            cam_map: 2D numpy array [0, 1]
-            alpha: Heatmap blend opacity (0.45 per project spec)
-            colormap_name: Colormap name ('jet' per spec)
-        Returns:
-            blended_pil: PIL RGB Image with heatmap overlay
+        Blends the Grad-CAM heatmap over the original fundus image using
+        vectorized JET LUT lookup at alpha=0.45 (45% opacity).
         """
         w, h = original_image.size
-        # Resize CAM map to match original image dimensions if needed
         if cam_map.shape != (h, w):
             cam_img = Image.fromarray((cam_map * 255).astype(np.uint8))
             cam_img = cam_img.resize((w, h), resample=Image.Resampling.BILINEAR)
             cam_map = np.array(cam_img, dtype=np.float32) / 255.0
 
-        # Apply colormap
-        cmap = matplotlib.colormaps[colormap_name]
-        colored_cam = cmap(cam_map)  # (H, W, 4) in [0, 1]
-        colored_cam_rgb = (colored_cam[:, :, :3] * 255).astype(np.float32)
+        # Fast Vectorized LUT Mapping: O(1) array indexing
+        indices = np.clip((cam_map * 255.0).astype(np.int32), 0, 255)
+        colored_cam_rgb = self._jet_lut[indices]  # (H, W, 3) in float32
 
         orig_np = np.array(original_image, dtype=np.float32)
 
-        # Blend: (1 - alpha) * original + alpha * heatmap
+        # Linear alpha blend: (1 - alpha) * orig + alpha * cam
         blended = (1.0 - alpha) * orig_np + alpha * colored_cam_rgb
         blended = np.clip(blended, 0, 255).astype(np.uint8)
 
@@ -162,9 +147,8 @@ class GradCAMGenerator:
     ) -> str:
         """
         Generates and saves the blended heatmap overlay to disk.
-        Returns the absolute file path.
         """
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         blended = self.create_overlay(original_image, cam_map, alpha=alpha)
-        blended.save(output_path, format="JPEG", quality=92)
+        blended.save(output_path, format="JPEG", quality=90)
         return os.path.abspath(output_path)

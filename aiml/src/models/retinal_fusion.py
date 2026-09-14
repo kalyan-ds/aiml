@@ -35,7 +35,7 @@ class RetinalFusionModel(nn.Module):
         pretrained: bool = True,
         dropout_rate_fusion: float = 0.4,
         dropout_rate_head: float = 0.2,
-        use_clinical_batchnorm: bool = True,
+        use_clinical_batchnorm: bool = False,
     ):
         super().__init__()
 

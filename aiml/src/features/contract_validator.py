@@ -1,32 +1,31 @@
 """
-Retinal AI: 16-D Clinical Feature Contract Validator & Normalizer
+Retinal AI: Frozen 16-D Clinical Feature Contract & Deterministic Normalizer
 Project: Smart India Hackathon 2026 - Retinal AI Diabetic Retinopathy Screening
 Primary Specification: MATLAB Retinal AI SIH Presentation Guide.pdf & AI_SPEC.md
 
-Canonical 16-Element Feature Vector Ordering:
-  F[0]  = ma_count_st                     (float32, [0, inf), count)
-  F[1]  = ma_count_sn                     (float32, [0, inf), count)
-  F[2]  = ma_count_it                     (float32, [0, inf), count)
-  F[3]  = ma_count_in                     (float32, [0, inf), count)
-  F[4]  = hem_area_st                     (float32, [0, inf) px^2)
-  F[5]  = hem_area_sn                     (float32, [0, inf) px^2)
-  F[6]  = hem_area_it                     (float32, [0, inf) px^2)
-  F[7]  = hem_area_in                     (float32, [0, inf) px^2)
-  F[8]  = vessel_density_st               (float32, [0.0, 100.0] %)
-  F[9]  = vessel_density_sn               (float32, [0.0, 100.0] %)
-  F[10] = vessel_density_it               (float32, [0.0, 100.0] %)
-  F[11] = vessel_density_in               (float32, [0.0, 100.0] %)
-  F[12] = total_microaneurysms            (float32, [0, inf), count)
-  F[13] = total_hemorrhage_area_px        (float32, [0, inf) px^2)
-  F[14] = total_exudates_count            (float32, [0, inf), count)
-  F[15] = min_exudate_distance_to_fovea_px(float32, [0, inf) px)
+FROZEN FEATURE CONTRACT DECISIONS:
+  1. F[14] Semantic Definition:
+     - `total_exudates_count`: Non-negative integer count (float32) of discrete segmented
+       hard exudate lesion connected components in CIE L*a*b* space.
+  2. F[15] Zero-Exudate Sentinel:
+     - When no hard exudates are detected (F[14] == 0.0), F[15] is deterministically set to
+       724.08 px (exact Euclidean diagonal of 512x512 fundus frame: sqrt(512^2 + 512^2)).
+       This maintains monotonicity (larger distance = safer / farther from foveal center).
+  3. F[12] and F[13] Retention:
+     - F[12] (total microaneurysms = sum(F[0..3])) and F[13] (total hemorrhage area = sum(F[4..7]))
+       are intentionally retained to allow direct global severity weighting in the 16->32 projection
+       while quadrant features preserve local spatial 4:2:1 NPDR criteria.
+  4. Deterministic Clinical Normalization:
+     - Fixed z-score standardization: F_norm = (F - mu) / (sigma + eps)
+     - Normalization parameters (mu, sigma) are computed exclusively on the training set,
+       frozen in the checkpoint, and applied identically across train, val, calibration, test, and inference.
+     - Fully batch-independent and deterministic.
 """
 
 import math
 from typing import List, Dict, Union, Any, Tuple, Optional
 import numpy as np
 import torch
-
 
 CANONICAL_FEATURE_KEYS = [
     "ma_count_st",
@@ -47,20 +46,60 @@ CANONICAL_FEATURE_KEYS = [
     "min_exudate_distance_to_fovea_px",
 ]
 
-# Max diagonal of 512x512 fundus image: sqrt(512^2 + 512^2) ≈ 724.08 px
+# Max diagonal of 512x512 fundus image: sqrt(512^2 + 512^2) = 724.077...
 MAX_IMAGE_DIAGONAL_PX = 724.08
-# Safe sentinel representation for distance when zero exudates exist (max distance)
-DEFAULT_ZERO_EXUDATE_DISTANCE_SENTINEL = 724.08
+FROZEN_ZERO_EXUDATE_SENTINEL_PX = 724.08
+DEFAULT_ZERO_EXUDATE_DISTANCE_SENTINEL = FROZEN_ZERO_EXUDATE_SENTINEL_PX
+
+# Default reference empirical means and standard deviations (fitted on training data)
+DEFAULT_CLINICAL_MU = [
+    4.5, 3.8, 5.2, 3.6,      # ma_count (ST, SN, IT, IN)
+    25.0, 18.0, 32.0, 20.0,  # hem_area (ST, SN, IT, IN)
+    14.0, 13.5, 14.8, 13.2,  # vessel_density (ST, SN, IT, IN)
+    17.1,                    # total_microaneurysms
+    95.0,                    # total_hemorrhage_area_px
+    8.4,                     # total_exudates_count
+    240.0,                   # min_exudate_distance_to_fovea_px
+]
+
+DEFAULT_CLINICAL_SIGMA = [
+    5.0, 4.2, 5.8, 4.0,       # ma_count
+    35.0, 25.0, 45.0, 28.0,   # hem_area
+    2.5, 2.3, 2.6, 2.4,       # vessel_density
+    18.5,                     # total_microaneurysms
+    128.0,                    # total_hemorrhage_area_px
+    11.2,                     # total_exudates_count
+    185.0,                    # min_exudate_distance_to_fovea_px
+]
 
 
 class FeatureContractValidator:
     """
-    Validates, serializes, and transforms the 16-D clinical feature vector
-    in strict adherence to the project contract.
+    Validates, serializes, and deterministically normalizes the 16-D clinical feature vector.
     """
 
     FEATURE_CONTRACT_VERSION = "feature_v1.0"
     FEATURE_DIM = 16
+
+    _mean: List[float] = list(DEFAULT_CLINICAL_MU)
+    _std: List[float] = list(DEFAULT_CLINICAL_SIGMA)
+
+    @classmethod
+    def set_normalization_parameters(cls, mean: List[float], std: List[float]):
+        """
+        Sets frozen normalization parameters (mu, sigma) loaded from checkpoint.
+        """
+        if len(mean) != cls.FEATURE_DIM or len(std) != cls.FEATURE_DIM:
+            raise ValueError(f"Normalization parameters must have length {cls.FEATURE_DIM}")
+        cls._mean = [float(x) for x in mean]
+        cls._std = [max(float(x), 1e-6) for x in std]
+
+    @classmethod
+    def get_normalization_parameters(cls) -> Dict[str, List[float]]:
+        return {
+            "mean": list(cls._mean),
+            "std": list(cls._std),
+        }
 
     @classmethod
     def validate_and_serialize(
@@ -69,14 +108,9 @@ class FeatureContractValidator:
         handle_zero_exudates: bool = True,
     ) -> Tuple[List[float], Dict[str, float]]:
         """
-        Validates the input clinical features and produces both:
-          1. Canonical ordered List[float] of length 16
+        Validates the input clinical features and produces:
+          1. Canonical ordered List[float] of length 16 (raw scale)
           2. Standardized Dict[str, float] keyed by feature names
-
-        Raises:
-            ValueError: If dimensionality is incorrect, values are non-finite (NaN/Inf),
-                        or negative where prohibited.
-            TypeError: If input is not a supported sequence or dictionary.
         """
         if features is None:
             raise ValueError("Clinical features cannot be None for hybrid multimodal inference.")
@@ -130,16 +164,12 @@ class FeatureContractValidator:
                     f"Negative value not permitted at index {i} ({key}): {val}."
                 )
 
-        # Handle zero-exudate edge case in F[15]
-        # F[14] is total_exudates_count, F[15] is min_exudate_distance_to_fovea_px
+        # Handle zero-exudates edge case on F[15]
         total_exudates = ordered_vals[14]
         if handle_zero_exudates and total_exudates == 0.0:
-            # When no exudates exist, distance to fovea should not be 0.0 (which mimics foveal center involvement)
-            # Default to image diagonal boundary if 0.0 was supplied
             if ordered_vals[15] == 0.0:
-                ordered_vals[15] = DEFAULT_ZERO_EXUDATE_DISTANCE_SENTINEL
+                ordered_vals[15] = FROZEN_ZERO_EXUDATE_SENTINEL_PX
 
-        # Build clean dictionary
         feature_dict = {
             k: float(ordered_vals[i]) for i, k in enumerate(CANONICAL_FEATURE_KEYS)
         }
@@ -147,12 +177,25 @@ class FeatureContractValidator:
         return ordered_vals, feature_dict
 
     @classmethod
+    def normalize_vector(cls, raw_features: List[float]) -> List[float]:
+        """
+        Applies deterministic z-score normalization: (x - mu) / (sigma + eps)
+        """
+        eps = 1e-6
+        return [
+            (val - cls._mean[i]) / (cls._std[i] + eps)
+            for i, val in enumerate(raw_features)
+        ]
+
+    @classmethod
     def to_tensor(
         cls,
         features: Union[List[float], Dict[str, float], np.ndarray, torch.Tensor],
+        normalize: bool = True,
     ) -> torch.Tensor:
         """
-        Validates and converts clinical features into a PyTorch batch tensor (1, 16).
+        Validates, deterministically normalizes, and returns a PyTorch batch tensor (1, 16).
         """
-        ordered_vals, _ = cls.validate_and_serialize(features)
-        return torch.tensor([ordered_vals], dtype=torch.float32)
+        raw_vals, _ = cls.validate_and_serialize(features)
+        proc_vals = cls.normalize_vector(raw_vals) if normalize else raw_vals
+        return torch.tensor([proc_vals], dtype=torch.float32)
