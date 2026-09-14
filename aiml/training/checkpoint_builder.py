@@ -21,7 +21,7 @@ def create_checkpoint(
     model: nn.Module,
     epoch: int,
     optimizer: Optional[torch.optim.Optimizer] = None,
-    calibrated_threshold: float = 0.35,
+    calibrated_threshold: float = 0.17,
     metrics: Optional[Dict[str, Any]] = None,
     dataset_metadata: Optional[Dict[str, Any]] = None,
     seed: int = 42,

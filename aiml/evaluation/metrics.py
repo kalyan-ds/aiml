@@ -30,7 +30,7 @@ from aiml.src.inference.predictor import ICDR_LABELS
 def compute_comprehensive_metrics(
     y_true: np.ndarray,
     y_probs: np.ndarray,
-    threshold: float = 0.35,
+    threshold: float = 0.17,
     cohort_name: str = "held_out_test",
 ) -> Dict[str, Any]:
     """

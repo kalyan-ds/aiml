@@ -341,7 +341,7 @@ def main():
         val_metrics = compute_comprehensive_metrics(
             y_true=val_targets_arr,
             y_probs=val_probs_arr,
-            threshold=0.35,
+            threshold=0.17,
             cohort_name="validation",
         )
 

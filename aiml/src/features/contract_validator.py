@@ -10,7 +10,7 @@ FROZEN FEATURE CONTRACT DECISIONS:
   2. F[15] Zero-Exudate Sentinel:
      - When no hard exudates are detected (F[14] == 0.0), F[15] is deterministically set to
        724.08 px (exact Euclidean diagonal of 512x512 fundus frame: sqrt(512^2 + 512^2)).
-       This maintains monotonicity (larger distance = safer / farther from foveal center).
+       This is defined as the maximum image-space sentinel distance when no exudates are detected.
   3. F[12] and F[13] Retention:
      - F[12] (total microaneurysms = sum(F[0..3])) and F[13] (total hemorrhage area = sum(F[4..7]))
        are intentionally retained to allow direct global severity weighting in the 16->32 projection

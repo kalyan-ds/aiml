@@ -45,7 +45,7 @@ class RealRetinalAIPredictor:
         checkpoint_path: Optional[str] = None,
         device: Optional[str] = None,
         heatmap_output_dir: str = "outputs/heatmaps",
-        default_threshold: float = 0.35,
+        default_threshold: float = 0.17,
     ):
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

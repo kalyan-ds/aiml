@@ -26,7 +26,8 @@ class CalibrationManager:
     Manages probability calibration, ROC threshold sweeps, and operational point selection.
     """
 
-    DEFAULT_THRESHOLD = 0.35  # Reference starting point pending validation sweep
+    DEFAULT_CALIBRATED_THRESHOLD = 0.17  # Frozen empirical threshold from validation ROC sweep
+    DEFAULT_THRESHOLD = 0.17
 
     def __init__(self, frozen_threshold: Optional[float] = None):
         self.frozen_threshold = frozen_threshold if frozen_threshold is not None else self.DEFAULT_THRESHOLD

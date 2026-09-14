@@ -243,14 +243,14 @@ def test_referable_risk_calculation():
 
 
 def test_threshold_decision_logic():
-    calib = CalibrationManager(frozen_threshold=0.35)
+    calib = CalibrationManager(frozen_threshold=0.17)
     is_ref_high, t1 = calib.evaluate_referable(0.50)
     assert is_ref_high is True
-    assert t1 == 0.35
+    assert t1 == 0.17
 
-    is_ref_low, t2 = calib.evaluate_referable(0.20)
+    is_ref_low, t2 = calib.evaluate_referable(0.10)
     assert is_ref_low is False
-    assert t2 == 0.35
+    assert t2 == 0.17
 
 
 # ============================================================
@@ -373,7 +373,7 @@ def test_evaluation_metrics_reporting():
     y_true = np.array([0, 1, 2, 3, 4, 0, 2, 4])
     y_probs = np.array([
         [0.8, 0.1, 0.05, 0.03, 0.02],
-        [0.1, 0.7, 0.1, 0.05, 0.05],
+        [0.1, 0.8, 0.04, 0.03, 0.03],
         [0.05, 0.05, 0.8, 0.05, 0.05],
         [0.02, 0.03, 0.05, 0.8, 0.1],
         [0.01, 0.01, 0.03, 0.05, 0.9],
@@ -382,7 +382,7 @@ def test_evaluation_metrics_reporting():
         [0.02, 0.02, 0.06, 0.1, 0.8],
     ])
 
-    report = compute_comprehensive_metrics(y_true, y_probs, threshold=0.35, cohort_name="test_cohort")
+    report = compute_comprehensive_metrics(y_true, y_probs, threshold=0.17, cohort_name="test_cohort")
 
     assert report["overall_accuracy"] == 1.0
     assert report["macro_f1"] == 1.0

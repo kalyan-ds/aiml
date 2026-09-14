@@ -27,7 +27,7 @@ def main():
         model=model,
         epoch=0,
         optimizer=None,
-        calibrated_threshold=0.35,
+        calibrated_threshold=0.17,
         metrics={
             "validation_macro_f1": 0.0,
             "calibrated_sensitivity": 0.900,
