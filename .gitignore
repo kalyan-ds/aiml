@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.pt
+.pytest_cache/
+outputs/heatmaps/*.jpg
+outputs/heatmaps/*.png
