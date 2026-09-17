@@ -1,0 +1,81 @@
+{
+  "model_version": "resnet50_fusion_v1.0.0",
+  "calibrated_threshold": 0.19,
+  "normalization_parameters": {
+    "mean": [
+      4.828571319580078,
+      4.800000190734863,
+      4.614285945892334,
+      5.0428571701049805,
+      43.33571243286133,
+      40.97142791748047,
+      43.67856979370117,
+      44.27857208251953,
+      14.218818664550781,
+      14.18195915222168,
+      14.120534896850586,
+      14.173584938049316,
+      19.285715103149414,
+      172.2642822265625,
+      8.128571510314941,
+      496.99029541015625
+    ],
+    "std": [
+      7.362978458404541,
+      7.30283784866333,
+      6.685362339019775,
+      7.58934211730957,
+      82.55990600585938,
+      75.25916290283203,
+      82.0947265625,
+      82.6131820678711,
+      1.1445634365081787,
+      1.2126939296722412,
+      1.0992835760116577,
+      1.1363260746002197,
+      27.894001007080078,
+      312.09661865234375,
+      13.202728271484375,
+      281.30859375
+    ]
+  },
+  "dataset_metadata": {
+    "dataset_name": "Patient-Stratified-Retinal-Cohort-v1",
+    "total_samples": 200,
+    "train_samples": 140,
+    "val_samples": 30,
+    "test_samples": 30,
+    "split_strategy": "Patient-level Stratified 70/15/15",
+    "batch_size": 8,
+    "epochs": 5,
+    "seed": 42,
+    "optimizer": "AdamW",
+    "learning_rate": 0.0003,
+    "weight_decay": 0.01,
+    "scheduler": "CosineAnnealingLR",
+    "min_lr": 1e-06,
+    "focal_loss_gamma": 2.0,
+    "focal_loss_alpha": [
+      0.5185,
+      0.9333,
+      1.0769,
+      2.0,
+      1.75
+    ],
+    "best_epoch": 5,
+    "class_distribution_train": {
+      "grade_0": 54,
+      "grade_1": 30,
+      "grade_2": 26,
+      "grade_3": 14,
+      "grade_4": 16
+    }
+  },
+  "test_results": {
+    "overall_accuracy": 0.8667,
+    "macro_f1": 0.7667,
+    "referable_sensitivity": 1.0,
+    "referable_specificity": 0.9286,
+    "referable_roc_auc": 1.0
+  }
+}

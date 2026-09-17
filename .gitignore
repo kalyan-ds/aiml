@@ -3,5 +3,7 @@ __pycache__/
 *$py.class
 *.pt
 .pytest_cache/
-outputs/heatmaps/*.jpg
-outputs/heatmaps/*.png
+outputs/heatmaps/
+aiml/outputs/heatmaps/
+**/heatmaps/*.jpg
+**/heatmaps/*.png

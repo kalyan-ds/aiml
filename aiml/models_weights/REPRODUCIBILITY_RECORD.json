@@ -1,0 +1,165 @@
+{
+  "reproducibility_record_version": "1.0.0",
+  "freeze_status": "FROZEN_RELEASE_CANDIDATE",
+  "timestamp": "2026-09-15T22:47:00Z",
+  "project": "Retinal AI Diabetic Retinopathy Screening System (SIH 2026 / PS ID: 26038)",
+  "owning_discipline": "AI/ML Engineering",
+  "model_identification": {
+    "model_version": "resnet50_fusion_v1.0.0",
+    "checkpoint_path": "aiml/models_weights/resnet50_fusion_v1.0.0.pt",
+    "sha256_digest": "856b387c9302bd681290c005ac95f53ba421c0148f6c0ab6d8b5d6c9bb019334",
+    "checkpoint_size_bytes": 294010890,
+    "best_epoch": 5,
+    "total_epochs": 5,
+    "master_seed": 42
+  },
+  "dataset_partitioning": {
+    "dataset_version": "Patient-Stratified-Retinal-Cohort-v1",
+    "patient_count": 100,
+    "total_samples": 200,
+    "train_samples": 140,
+    "train_patients": 70,
+    "val_samples": 30,
+    "val_patients": 15,
+    "test_samples": 30,
+    "test_patients": 15,
+    "patient_leakage_verified": false,
+    "split_ratios": {
+      "train": 0.70,
+      "val": 0.15,
+      "test": 0.15
+    }
+  },
+  "architecture_specification": {
+    "cnn_backbone": "ResNet-50 (IMAGENET1K_V2 weights, truncated at Global Average Pooling)",
+    "cnn_embedding_dim": 2048,
+    "clinical_input_dim": 16,
+    "clinical_projection": "Linear(16, 32) + ReLU",
+    "clinical_embedding_dim": 32,
+    "multimodal_fusion": "Concatenate [v_cnn ; v_clin]",
+    "fused_embedding_dim": 2080,
+    "classification_head": "Dropout(0.4) -> Linear(2080, 128) -> ReLU -> Dropout(0.2) -> Linear(128, 5)",
+    "output_dim": 5,
+    "output_classes": {
+      "0": "No DR",
+      "1": "Mild NPDR",
+      "2": "Moderate NPDR",
+      "3": "Severe NPDR",
+      "4": "Proliferative DR (PDR)"
+    }
+  },
+  "training_hyperparameters": {
+    "optimizer": "AdamW",
+    "learning_rate": 0.0003,
+    "weight_decay": 0.01,
+    "scheduler": "CosineAnnealingLR",
+    "min_learning_rate": 1e-06,
+    "loss_function": "MultiClassFocalLoss",
+    "focal_gamma": 2.0,
+    "focal_alpha_weights": [0.5185, 0.9333, 1.0769, 2.0, 1.75],
+    "batch_size": 8
+  },
+  "preprocessing_and_normalization": {
+    "preprocessing_version": "rgb_512_imagenet_v1",
+    "input_resolution": [512, 512],
+    "color_space": "RGB",
+    "imagenet_mean": [0.485, 0.456, 0.406],
+    "imagenet_std": [0.229, 0.224, 0.225],
+    "clinical_normalization_policy": "zscore_frozen_training_v1.0",
+    "clinical_feature_keys": [
+      "ma_count_st",
+      "ma_count_sn",
+      "ma_count_it",
+      "ma_count_in",
+      "hem_area_st",
+      "hem_area_sn",
+      "hem_area_it",
+      "hem_area_in",
+      "vessel_density_st",
+      "vessel_density_sn",
+      "vessel_density_it",
+      "vessel_density_in",
+      "total_microaneurysms",
+      "total_hemorrhage_area_px",
+      "total_exudates_count",
+      "min_exudate_distance_to_fovea_px"
+    ],
+    "clinical_mean": [
+      4.828571319580078,
+      4.800000190734863,
+      4.614285945892334,
+      5.0428571701049805,
+      43.33571243286133,
+      40.97142791748047,
+      43.67856979370117,
+      44.27857208251953,
+      14.218818664550781,
+      14.18195915222168,
+      14.120534896850586,
+      14.173584938049316,
+      19.285715103149414,
+      172.2642822265625,
+      8.128571510314941,
+      496.99029541015625
+    ],
+    "clinical_std": [
+      7.362978458404541,
+      7.30283784866333,
+      6.685362339019775,
+      7.58934211730957,
+      82.55990600585938,
+      75.25916290283203,
+      82.0947265625,
+      82.6131820678711,
+      1.1445634365081787,
+      1.2126939296722412,
+      1.0992835760116577,
+      1.1363260746002197,
+      27.894001007080078,
+      312.09661865234375,
+      13.202728271484375,
+      281.30859375
+    ],
+    "zero_exudates_sentinel_px": 724.08
+  },
+  "calibration_and_triage": {
+    "referable_risk_formula": "P2 + P3 + P4",
+    "operating_threshold_tau": 0.19,
+    "calibration_cohort": "Validation Cohort (N=30)",
+    "selection_constraint": "Sensitivity >= 0.900",
+    "achieved_val_sensitivity": 1.0,
+    "achieved_val_specificity": 1.0
+  },
+  "evaluation_metrics": {
+    "validation": {
+      "sample_count": 30,
+      "accuracy": 0.7667,
+      "macro_f1": 0.7046,
+      "referable_sensitivity": 1.0,
+      "referable_specificity": 1.0,
+      "referable_roc_auc": 1.0
+    },
+    "held_out_test": {
+      "sample_count": 30,
+      "accuracy": 0.8667,
+      "macro_f1": 0.7667,
+      "weighted_f1": 0.8111,
+      "quadratic_weighted_kappa": 0.9703,
+      "macro_ovr_roc_auc": 0.9708,
+      "referable_sensitivity": 1.0,
+      "referable_specificity": 0.9286,
+      "referable_roc_auc": 1.0,
+      "confusion_matrix": [
+        [10, 0, 0, 0, 0],
+        [4, 0, 0, 0, 0],
+        [0, 0, 6, 0, 0],
+        [0, 0, 0, 6, 0],
+        [0, 0, 0, 0, 4]
+      ]
+    }
+  },
+  "latency_profile_cpu": {
+    "forward_pass_ms": 358.48,
+    "end_to_end_with_gradcam_ms": 740.36
+  }
+}

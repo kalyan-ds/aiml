@@ -1,0 +1,110 @@
+{
+  "cohort_name": "held_out_test",
+  "sample_count": 30,
+  "overall_accuracy": 0.8667,
+  "macro_f1": 0.7667,
+  "weighted_f1": 0.8111,
+  "quadratic_weighted_kappa": 0.9703,
+  "macro_ovr_roc_auc": 0.9708,
+  "per_class_ovr_auc": {
+    "class_0_No DR": 0.95,
+    "class_1_Mild NPDR": 0.9038,
+    "class_2_Moderate NPDR": 1.0,
+    "class_3_Severe NPDR": 1.0,
+    "class_4_Proliferative DR (PDR)": 1.0
+  },
+  "per_class_metrics": {
+    "grade_0_No DR": {
+      "grade": 0,
+      "label": "No DR",
+      "precision": 0.7142857142857143,
+      "recall": 1.0,
+      "f1_score": 0.8333333333333334,
+      "support": 10
+    },
+    "grade_1_Mild NPDR": {
+      "grade": 1,
+      "label": "Mild NPDR",
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "support": 4
+    },
+    "grade_2_Moderate NPDR": {
+      "grade": 2,
+      "label": "Moderate NPDR",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "support": 6
+    },
+    "grade_3_Severe NPDR": {
+      "grade": 3,
+      "label": "Severe NPDR",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "support": 6
+    },
+    "grade_4_Proliferative DR (PDR)": {
+      "grade": 4,
+      "label": "Proliferative DR (PDR)",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "support": 4
+    }
+  },
+  "confusion_matrix": [
+    [
+      10,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      4,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      6,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      6,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      4
+    ]
+  ],
+  "referable_dr_triage": {
+    "applied_threshold": 0.19,
+    "sensitivity": 1.0,
+    "specificity": 0.9286,
+    "positive_predictive_value": 0.9412,
+    "negative_predictive_value": 1.0,
+    "f1_score": 0.9697,
+    "roc_auc": 1.0,
+    "confusion": {
+      "tp": 16,
+      "fp": 1,
+      "tn": 13,
+      "fn": 0
+    }
+  }
+}
