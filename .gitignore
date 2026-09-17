@@ -1,7 +1,6 @@
 __pycache__/
 *.py[cod]
 *$py.class
-*.pt
 .pytest_cache/
 outputs/heatmaps/
 aiml/outputs/heatmaps/
